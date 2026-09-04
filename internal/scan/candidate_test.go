@@ -126,6 +126,78 @@ func TestEvaluateResourcePullRequestLookupFailureIsIncompleteNotFatal(t *testing
 	}
 }
 
+// TestEvaluateResourceBranchLookupFailureIsUnknownNeverMissing guards
+// against GitHub's branch 404 ambiguity (missing branch vs. inaccessible
+// repository) leaking into scoring as false-positive "missing branch"
+// evidence: a failed branch check must always be reported as unknown, and
+// must never set SourceBranchExists/SourceBranchChecked or contribute the
+// KindSourceBranchMissing signal that (combined with a merged PR) would
+// otherwise manufacture a HIGH-confidence cleanup recommendation.
+func TestEvaluateResourceBranchLookupFailureIsUnknownNeverMissing(t *testing.T) {
+	sourceControl := &stubSourceControl{
+		pullRequests: map[int]domain.PullRequest{
+			1: {
+				Number:         1,
+				State:          domain.PullRequestStateMerged,
+				HeadRepository: "RishabJain30/sweep-lifecycle",
+				HeadBranch:     "feat/example",
+			},
+		},
+		branchErr: errors.New(
+			"cannot verify branch \"feat/example\": repository is not " +
+				"accessible with the current token",
+		),
+	}
+
+	candidate, warning := EvaluateResource(
+		context.Background(),
+		sourceControl,
+		"RishabJain30/sweep-lifecycle",
+		ResourceInput{
+			Provider:              "neon",
+			ResourceID:            "br-preview",
+			ResourceName:          "preview-pr-1",
+			NameMatchesConvention: true,
+			PullRequestNumber:     1,
+		},
+		fixedNow,
+	)
+
+	if warning == "" {
+		t.Fatal("warning is empty, want a warning describing the failure")
+	}
+
+	if candidate.SourceBranchChecked {
+		t.Fatal(
+			"SourceBranchChecked = true, want false: an ambiguous " +
+				"failure must never be reported as a confirmed check",
+		)
+	}
+
+	if candidate.SourceBranchExists {
+		t.Fatal("SourceBranchExists = true, want false")
+	}
+
+	for _, item := range candidate.Evidence {
+		if item.Kind == evidence.KindSourceBranchMissing {
+			t.Fatalf(
+				"evidence = %+v, want no KindSourceBranchMissing item "+
+					"when the branch check failed",
+				candidate.Evidence,
+			)
+		}
+	}
+
+	if candidate.Score.Confidence != scoring.ConfidenceLow {
+		t.Fatalf(
+			"Confidence = %s, want %s: a failed branch check must never "+
+				"produce HIGH confidence even with a merged PR",
+			candidate.Score.Confidence,
+			scoring.ConfidenceLow,
+		)
+	}
+}
+
 func TestEvaluateResourceProtectedNamedLikeAPreview(t *testing.T) {
 	// A resource that is both protected and happens to match the naming
 	// convention must still be excluded, and evidence must accurately
