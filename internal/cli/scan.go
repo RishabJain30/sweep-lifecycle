@@ -70,12 +70,18 @@ func newScanCommand(run scanRunner) *cobra.Command {
 						"Resource ID: %s\n"+
 						"Associated PR: #%d\n"+
 						"PR state: %s\n"+
+						"PR head repository: %s\n"+
+						"PR head branch: %s\n"+
+						"Source branch exists: %t\n"+
 						"Default: %t\n"+
 						"Protected: %t\n",
 					match.Branch.Name,
 					match.Branch.ID,
 					match.PullRequest.Number,
 					match.PullRequest.State,
+					headRepositoryDisplay(match.PullRequest.HeadRepository),
+					match.PullRequest.HeadBranch,
+					match.SourceBranchExists,
 					match.Branch.Default,
 					match.Branch.Protected,
 				)
@@ -103,6 +109,16 @@ func newScanCommand(run scanRunner) *cobra.Command {
 	)
 
 	return command
+}
+
+// headRepositoryDisplay reports a fork/source repository that GitHub no
+// longer exposes, instead of printing an empty value.
+func headRepositoryDisplay(headRepository string) string {
+	if headRepository == "" {
+		return "(unknown - source repository no longer available)"
+	}
+
+	return headRepository
 }
 
 // runScan creates the real providers and executes the scan service.

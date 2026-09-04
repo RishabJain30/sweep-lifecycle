@@ -39,9 +39,12 @@ func TestScanCommandPrintsCorrelatedResources(t *testing.T) {
 					Name: "preview-pr-1",
 				},
 				PullRequest: domain.PullRequest{
-					Number: 1,
-					State:  domain.PullRequestStateMerged,
+					Number:         1,
+					State:          domain.PullRequestStateMerged,
+					HeadRepository: "RishabJain30/sweep-lifecycle",
+					HeadBranch:     "feat/example",
 				},
+				SourceBranchExists: false,
 			},
 		}, nil
 	})
@@ -66,6 +69,9 @@ func TestScanCommandPrintsCorrelatedResources(t *testing.T) {
 		"Resource ID: br-preview",
 		"Associated PR: #1",
 		"PR state: merged",
+		"PR head repository: RishabJain30/sweep-lifecycle",
+		"PR head branch: feat/example",
+		"Source branch exists: false",
 		"Default: false",
 		"Protected: false",
 	}
