@@ -11,6 +11,7 @@ func newRootCommand() *cobra.Command {
 	}
 
 	rootCmd.AddCommand(newScanCommand(runScan))
+	rootCmd.AddCommand(newExplainCommand(runExplain))
 
 	return rootCmd
 }
