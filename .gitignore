@@ -1,0 +1,12 @@
+# Compiled binaries
+/bin/
+
+# Go test output
+*.test
+coverage.out
+
+# Local secrets
+.env
+
+# macOS
+.DS_Store
