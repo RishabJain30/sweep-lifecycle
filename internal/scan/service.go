@@ -15,32 +15,40 @@ type BranchLister interface {
 	) ([]domain.DatabaseBranch, error)
 }
 
-type PullRequestGetter interface {
+// SourceControl provides the GitHub lifecycle information needed by a scan.
+type SourceControl interface {
 	GetPullRequest(
 		ctx context.Context,
 		repository string,
 		number int,
 	) (domain.PullRequest, error)
+
+	BranchExists(
+		ctx context.Context,
+		repository string,
+		branch string,
+	) (bool, error)
 }
 
 type Match struct {
-	Branch      domain.DatabaseBranch
-	PullRequest domain.PullRequest
+	Branch             domain.DatabaseBranch
+	PullRequest        domain.PullRequest
+	SourceBranchExists bool
 }
 
 type Service struct {
-	branches     BranchLister
-	pullRequests PullRequestGetter
+	branches      BranchLister
+	sourceControl SourceControl
 }
 
 // NewService creates a scan service using the supplied provider clients.
 func NewService(
 	branches BranchLister,
-	pullRequests PullRequestGetter,
+	sourceControl SourceControl,
 ) *Service {
 	return &Service{
-		branches:     branches,
-		pullRequests: pullRequests,
+		branches:      branches,
+		sourceControl: sourceControl,
 	}
 }
 
@@ -67,7 +75,7 @@ func (service *Service) Scan(
 			continue
 		}
 
-		pr, err := service.pullRequests.GetPullRequest(
+		pr, err := service.sourceControl.GetPullRequest(
 			ctx,
 			repository,
 			prNumber,
@@ -82,9 +90,31 @@ func (service *Service) Scan(
 			)
 		}
 
+		sourceBranchExists := false
+
+		// An empty head repository means GitHub no longer exposes the
+		// repository that originally contained the source branch.
+		if pr.HeadRepository != "" {
+			sourceBranchExists, err = service.sourceControl.BranchExists(
+				ctx,
+				pr.HeadRepository,
+				pr.HeadBranch,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"check GitHub branch %s:%s for PR #%d: %w",
+					pr.HeadRepository,
+					pr.HeadBranch,
+					pr.Number,
+					err,
+				)
+			}
+		}
+
 		matches = append(matches, Match{
-			Branch:      branch,
-			PullRequest: pr,
+			Branch:             branch,
+			PullRequest:        pr,
+			SourceBranchExists: sourceBranchExists,
 		})
 	}
 
