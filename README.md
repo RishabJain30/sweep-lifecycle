@@ -154,7 +154,7 @@ sweep scan --repo owner/name --neon-project my-project --format json
 Text output is organized into six sections, in order: provider discovery
 status; cleanup candidates (each with its correlated PR, source-branch
 status, deterministic evidence, score, and confidence — only resources
-`scoring.Result.Recommended` actually clears land here); uncertain/
+where `scoring.Result.Recommended` is true land here); uncertain/
 low-confidence resources that were evaluated but don't clear the bar to
 recommend cleanup (a low score, or evidence left incomplete by a failed
 provider lookup); protected/skipped resources with their exclusion reason;

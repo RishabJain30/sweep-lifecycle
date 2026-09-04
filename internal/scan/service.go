@@ -56,12 +56,12 @@ type ProviderStatus struct {
 
 // Result is the complete, honest outcome of one scan.
 //
-// Candidates only holds resources scoring.Result.Recommended is true for -
-// evidence that actually clears the bar to call something a cleanup
-// candidate. A resource that was correlated and evaluated but didn't clear
-// that bar (a low score, or evidence that stayed incomplete after a
-// provider lookup failed) lands in Uncertain instead: it is still fully
-// reported, just never presented as something worth cleaning up.
+// Candidates only holds resources whose scoring.Result.Recommended is
+// true - evidence that actually clears the bar to call something a
+// cleanup candidate. A resource that was correlated and evaluated but
+// didn't clear that bar (a low score, or evidence that stayed incomplete
+// after a provider lookup failed) lands in Uncertain instead: it is still
+// fully reported, just never presented as something worth cleaning up.
 type Result struct {
 	ProviderStatuses []ProviderStatus
 	Candidates       []Candidate
