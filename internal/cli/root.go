@@ -10,7 +10,7 @@ func newRootCommand() *cobra.Command {
 		SilenceUsage:  true,
 	}
 
-	rootCmd.AddCommand(newScanCommand())
+	rootCmd.AddCommand(newScanCommand(runScan))
 
 	return rootCmd
 }
