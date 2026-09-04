@@ -1,8 +1,15 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+
+	"github.com/RishabJain30/sweep-lifecycle/internal/cli"
+)
 
 func main() {
-	fmt.Println("Sweep")
-	fmt.Println("Garbage collection for your engineering stack.")
+	if err := cli.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
