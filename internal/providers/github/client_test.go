@@ -117,3 +117,30 @@ func TestNewClientRequiresToken(t *testing.T) {
 		t.Fatal("NewClient() error = nil, want an error")
 	}
 }
+
+func TestClientErrorsNeverContainTheToken(t *testing.T) {
+	const secretToken = "ghp_do-not-leak-this-token"
+
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "server error", http.StatusInternalServerError)
+		},
+	))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+		token:      secretToken,
+	}
+
+	_, prErr := client.GetPullRequest(context.Background(), "cli/cli", 1)
+	if prErr == nil || strings.Contains(prErr.Error(), secretToken) {
+		t.Fatalf("GetPullRequest() error leaked the token: %v", prErr)
+	}
+
+	_, branchErr := client.BranchExists(context.Background(), "cli/cli", "main")
+	if branchErr == nil || strings.Contains(branchErr.Error(), secretToken) {
+		t.Fatalf("BranchExists() error leaked the token: %v", branchErr)
+	}
+}

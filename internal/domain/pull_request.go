@@ -11,13 +11,14 @@ const (
 )
 
 type PullRequest struct {
-	Repository string
-	Number     int
-	HeadBranch string
-	HeadSHA    string
-	State      PullRequestState
-	ClosedAt   *time.Time
-	MergedAt   *time.Time
+	Repository     string
+	Number         int
+	HeadRepository string
+	HeadBranch     string
+	HeadSHA        string
+	State          PullRequestState
+	ClosedAt       *time.Time
+	MergedAt       *time.Time
 }
 
 func (pr PullRequest) IsFinished() bool {

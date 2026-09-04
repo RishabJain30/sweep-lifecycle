@@ -199,3 +199,141 @@ func TestNewClientRequiresToken(t *testing.T) {
 		t.Fatal("NewClient() error = nil, want an error")
 	}
 }
+
+func TestClientGetBranch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				t.Errorf("method = %q, want %q", r.Method, http.MethodGet)
+			}
+
+			wantPath := "/projects/test-project/branches/br-preview"
+			if r.URL.Path != wantPath {
+				t.Errorf(
+					"path = %q, want %q",
+					r.URL.Path,
+					wantPath,
+				)
+			}
+
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				t.Errorf(
+					"Authorization = %q, want %q",
+					got,
+					"Bearer test-token",
+				)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{
+				"branch": {
+					"id": "br-preview",
+					"project_id": "test-project",
+					"parent_id": "br-production",
+					"name": "preview-pr-1",
+					"current_state": "ready",
+					"default": false,
+					"protected": false,
+					"created_at": "2026-09-02T10:00:00Z",
+					"updated_at": "2026-09-02T10:00:00Z",
+					"expires_at": null
+				}
+			}`)
+		},
+	))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+		token:      "test-token",
+	}
+
+	branch, err := client.GetBranch(
+		context.Background(),
+		"test-project",
+		"br-preview",
+	)
+	if err != nil {
+		t.Fatalf("GetBranch() error = %v", err)
+	}
+
+	if branch.Name != "preview-pr-1" {
+		t.Fatalf("Name = %q, want %q", branch.Name, "preview-pr-1")
+	}
+
+	if branch.ID != "br-preview" {
+		t.Fatalf("ID = %q, want %q", branch.ID, "br-preview")
+	}
+}
+
+func TestClientGetBranchReturnsAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "not found", http.StatusNotFound)
+		},
+	))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+		token:      "test-token",
+	}
+
+	_, err := client.GetBranch(
+		context.Background(),
+		"test-project",
+		"br-missing",
+	)
+	if err == nil {
+		t.Fatal("GetBranch() error = nil, want an error")
+	}
+
+	if !strings.Contains(err.Error(), "404") {
+		t.Fatalf("error = %q, want it to contain 404", err)
+	}
+}
+
+func TestClientErrorsNeverContainTheToken(t *testing.T) {
+	const secretToken = "neon-do-not-leak-this-token"
+
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "server error", http.StatusInternalServerError)
+		},
+	))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+		token:      secretToken,
+	}
+
+	_, listErr := client.ListBranches(context.Background(), "test-project")
+	if listErr == nil || strings.Contains(listErr.Error(), secretToken) {
+		t.Fatalf("ListBranches() error leaked the token: %v", listErr)
+	}
+
+	_, getErr := client.GetBranch(context.Background(), "test-project", "br-1")
+	if getErr == nil || strings.Contains(getErr.Error(), secretToken) {
+		t.Fatalf("GetBranch() error leaked the token: %v", getErr)
+	}
+}
+
+func TestClientGetBranchRequiresProjectAndBranchID(t *testing.T) {
+	client := &Client{
+		httpClient: http.DefaultClient,
+		baseURL:    "https://example.invalid",
+		token:      "test-token",
+	}
+
+	if _, err := client.GetBranch(context.Background(), "", "br-preview"); err == nil {
+		t.Fatal("GetBranch() error = nil, want an error for missing project ID")
+	}
+
+	if _, err := client.GetBranch(context.Background(), "test-project", ""); err == nil {
+		t.Fatal("GetBranch() error = nil, want an error for missing branch ID")
+	}
+}

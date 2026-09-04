@@ -15,7 +15,10 @@ func TestAPIPullRequestToDomain(t *testing.T) {
 		"merged_at": "2026-09-04T09:02:01Z",
 		"head": {
 			"ref": "issue-triage-permalinks",
-			"sha": "92029a9e735475ab83b9daffeff500c92a9fe2ad"
+			"sha": "92029a9e735475ab83b9daffeff500c92a9fe2ad",
+			"repo": {
+				"full_name": "contributor/cli"
+			}
 		},
 		"base": {
 			"repo": {
@@ -36,6 +39,14 @@ func TestAPIPullRequestToDomain(t *testing.T) {
 
 	if pr.Repository != "cli/cli" {
 		t.Fatalf("Repository = %q, want %q", pr.Repository, "cli/cli")
+	}
+
+	if pr.HeadRepository != "contributor/cli" {
+		t.Fatalf(
+			"HeadRepository = %q, want %q",
+			pr.HeadRepository,
+			"contributor/cli",
+		)
 	}
 
 	if pr.Number != 14343 {
