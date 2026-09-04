@@ -326,6 +326,33 @@ func TestClientGetDeploymentRequiresDeploymentID(t *testing.T) {
 	}
 }
 
+func TestClientErrorsNeverContainTheToken(t *testing.T) {
+	const secretToken = "vercel-do-not-leak-this-token"
+
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "server error", http.StatusInternalServerError)
+		},
+	))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+		token:      secretToken,
+	}
+
+	_, listErr := client.ListDeployments(context.Background(), "prj_1")
+	if listErr == nil || strings.Contains(listErr.Error(), secretToken) {
+		t.Fatalf("ListDeployments() error leaked the token: %v", listErr)
+	}
+
+	_, getErr := client.GetDeployment(context.Background(), "dpl_1")
+	if getErr == nil || strings.Contains(getErr.Error(), secretToken) {
+		t.Fatalf("GetDeployment() error leaked the token: %v", getErr)
+	}
+}
+
 func TestClientGetDeploymentReturnsAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) {

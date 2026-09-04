@@ -196,6 +196,33 @@ func TestScanCommandPrintsJSONReport(t *testing.T) {
 		t.Fatalf("summary = %+v, want 1/1/1/1", report.Summary)
 	}
 
+	if len(report.Providers) != 2 {
+		t.Fatalf("providers = %+v, want 2", report.Providers)
+	}
+
+	if report.Providers[0].Provider != "neon" ||
+		report.Providers[0].Status != "ok" {
+		t.Fatalf("providers[0] = %+v, want neon/ok", report.Providers[0])
+	}
+
+	if len(report.Skipped) != 1 ||
+		report.Skipped[0].ResourceID != "br-prod" ||
+		!strings.Contains(report.Skipped[0].Reason, "protected") {
+		t.Fatalf("skipped = %+v, want br-prod/protected", report.Skipped)
+	}
+
+	if len(report.Warnings) != 1 ||
+		report.Warnings[0].Resource != "br-flaky" {
+		t.Fatalf("warnings = %+v, want br-flaky", report.Warnings)
+	}
+
+	if len(report.Candidates[0].Score.Evidence) != 2 {
+		t.Fatalf(
+			"evidence = %+v, want 2 contributions",
+			report.Candidates[0].Score.Evidence,
+		)
+	}
+
 	if strings.Contains(output.String(), "GITHUB_TOKEN") ||
 		strings.Contains(output.String(), "token") {
 		t.Fatalf(

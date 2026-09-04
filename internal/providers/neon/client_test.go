@@ -295,6 +295,33 @@ func TestClientGetBranchReturnsAPIError(t *testing.T) {
 	}
 }
 
+func TestClientErrorsNeverContainTheToken(t *testing.T) {
+	const secretToken = "neon-do-not-leak-this-token"
+
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "server error", http.StatusInternalServerError)
+		},
+	))
+	defer server.Close()
+
+	client := &Client{
+		httpClient: server.Client(),
+		baseURL:    server.URL,
+		token:      secretToken,
+	}
+
+	_, listErr := client.ListBranches(context.Background(), "test-project")
+	if listErr == nil || strings.Contains(listErr.Error(), secretToken) {
+		t.Fatalf("ListBranches() error leaked the token: %v", listErr)
+	}
+
+	_, getErr := client.GetBranch(context.Background(), "test-project", "br-1")
+	if getErr == nil || strings.Contains(getErr.Error(), secretToken) {
+		t.Fatalf("GetBranch() error leaked the token: %v", getErr)
+	}
+}
+
 func TestClientGetBranchRequiresProjectAndBranchID(t *testing.T) {
 	client := &Client{
 		httpClient: http.DefaultClient,
