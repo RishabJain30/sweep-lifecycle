@@ -253,6 +253,31 @@ func TestExplainCommandRequiresRepository(t *testing.T) {
 	}
 }
 
+func TestExplainCommandRejectsMalformedRepository(t *testing.T) {
+	command := newExplainCommand(func(
+		context.Context,
+		explainTarget,
+	) (scanservice.Candidate, error) {
+		t.Fatal("explain runner should not be called")
+		return scanservice.Candidate{}, nil
+	})
+
+	command.SetArgs([]string{
+		"neon:br-preview",
+		"--repo", "not-a-valid-repo",
+		"--neon-project", "test-project",
+	})
+
+	err := command.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want an error")
+	}
+
+	if !strings.Contains(err.Error(), "owner/name") {
+		t.Fatalf("error = %q, want an owner/name format error", err)
+	}
+}
+
 func TestExplainCommandRequiresNeonProjectForNeonResource(t *testing.T) {
 	command := newExplainCommand(func(
 		context.Context,

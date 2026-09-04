@@ -232,6 +232,30 @@ func TestScanCommandPrintsJSONReport(t *testing.T) {
 	}
 }
 
+func TestScanCommandRejectsMalformedRepository(t *testing.T) {
+	command := newScanCommand(func(
+		context.Context,
+		scanservice.Config,
+	) (scanservice.Result, error) {
+		t.Fatal("scan runner should not be called")
+		return scanservice.Result{}, nil
+	})
+
+	command.SetArgs([]string{
+		"--repo", "not-a-valid-repo",
+		"--neon-project", "test-project",
+	})
+
+	err := command.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want an error")
+	}
+
+	if !strings.Contains(err.Error(), "owner/name") {
+		t.Fatalf("error = %q, want an owner/name format error", err)
+	}
+}
+
 func TestScanCommandRequiresRepository(t *testing.T) {
 	command := newScanCommand(func(
 		context.Context,

@@ -38,6 +38,10 @@ func newScanCommand(run scanRunner) *cobra.Command {
 				return errors.New("--repo is required")
 			}
 
+			if _, _, err := githubprovider.ParseRepository(cfg.Repository); err != nil {
+				return err
+			}
+
 			if strings.TrimSpace(cfg.NeonProjectID) == "" {
 				return errors.New("--neon-project is required")
 			}

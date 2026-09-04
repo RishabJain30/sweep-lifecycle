@@ -51,6 +51,10 @@ func newExplainCommand(run explainRunner) *cobra.Command {
 				return errors.New("--repo is required")
 			}
 
+			if _, _, err := githubprovider.ParseRepository(target.Repository); err != nil {
+				return err
+			}
+
 			if target.Provider == "neon" &&
 				strings.TrimSpace(target.NeonProjectID) == "" {
 				return errors.New(
@@ -263,7 +267,7 @@ func explainVercelDeployment(
 	candidate, _ := scanservice.EvaluateResource(
 		ctx,
 		github,
-		target.Repository,
+		scanservice.DeploymentRepository(deployment, target.Repository),
 		scanservice.ResourceInput{
 			Provider:          "vercel",
 			ResourceID:        deployment.ID,

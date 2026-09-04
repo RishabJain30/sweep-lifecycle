@@ -212,7 +212,7 @@ func (service *Service) evaluateVercelDeployment(
 	candidate, warning := EvaluateResource(
 		ctx,
 		service.github,
-		repository,
+		DeploymentRepository(deployment, repository),
 		ResourceInput{
 			Provider:          "vercel",
 			ResourceID:        deployment.ID,
@@ -226,6 +226,26 @@ func (service *Service) evaluateVercelDeployment(
 	)
 
 	record(result, candidate, warning)
+}
+
+// DeploymentRepository reports which GitHub repository to correlate a
+// Vercel deployment's pull request against. A deployment's own Git
+// metadata is authoritative when Vercel reports it: a Vercel project can
+// be connected to a different repository than --repo names (a fork, a
+// rename, or a multi-repo setup), and querying the wrong repository could
+// correlate a deployment with an unrelated pull request. fallbackRepository
+// is only used for deployments with no Git metadata at all. scan.Service
+// and the explain command both call this so a deployment is never
+// correlated against the wrong repository in one path but not the other.
+func DeploymentRepository(
+	deployment domain.VercelDeployment,
+	fallbackRepository string,
+) string {
+	if deployment.SourceRepository != "" {
+		return deployment.SourceRepository
+	}
+
+	return fallbackRepository
 }
 
 func record(result *Result, candidate Candidate, warning string) {

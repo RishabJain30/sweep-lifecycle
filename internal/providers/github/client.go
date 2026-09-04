@@ -45,7 +45,7 @@ func (c *Client) GetPullRequest(
 	repository string,
 	number int,
 ) (domain.PullRequest, error) {
-	owner, name, err := parseRepository(repository)
+	owner, name, err := ParseRepository(repository)
 	if err != nil {
 		return domain.PullRequest{}, err
 	}
@@ -123,7 +123,7 @@ func (c *Client) BranchExists(
 	repository string,
 	branch string,
 ) (bool, error) {
-	owner, name, err := parseRepository(repository)
+	owner, name, err := ParseRepository(repository)
 	if err != nil {
 		return false, err
 	}
@@ -180,8 +180,11 @@ func (c *Client) BranchExists(
 	}
 }
 
-// parseRepository separates an owner/name repository identifier.
-func parseRepository(repository string) (string, string, error) {
+// ParseRepository separates an owner/name repository identifier. It is
+// exported so callers (such as CLI flag validation) can reject a malformed
+// --repo once, up front, instead of failing separately for every
+// correlated resource.
+func ParseRepository(repository string) (string, string, error) {
 	parts := strings.Split(repository, "/")
 
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {

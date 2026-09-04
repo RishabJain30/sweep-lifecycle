@@ -50,9 +50,10 @@ type branchLookup struct {
 }
 
 type stubSourceControl struct {
-	pullRequests     map[int]domain.PullRequest
-	pullRequestErr   error
-	pullRequestCalls []int
+	pullRequests            map[int]domain.PullRequest
+	pullRequestErr          error
+	pullRequestCalls        []int
+	pullRequestRepositories []string
 
 	branchExists bool
 	branchErr    error
@@ -61,10 +62,14 @@ type stubSourceControl struct {
 
 func (stub *stubSourceControl) GetPullRequest(
 	_ context.Context,
-	_ string,
+	repository string,
 	number int,
 ) (domain.PullRequest, error) {
 	stub.pullRequestCalls = append(stub.pullRequestCalls, number)
+	stub.pullRequestRepositories = append(
+		stub.pullRequestRepositories,
+		repository,
+	)
 
 	if stub.pullRequestErr != nil {
 		return domain.PullRequest{}, stub.pullRequestErr
@@ -670,6 +675,94 @@ func TestServiceScanExcludesProductionVercelDeployment(t *testing.T) {
 			"reason = %q, want it to mention production",
 			skipped.Reason,
 		)
+	}
+}
+
+func TestServiceScanCorrelatesVercelDeploymentAgainstItsOwnRepository(t *testing.T) {
+	prNumber := 9
+
+	sourceControl := &stubSourceControl{
+		pullRequests: map[int]domain.PullRequest{
+			9: {Number: 9, State: domain.PullRequestStateMerged},
+		},
+	}
+
+	service := NewService(
+		stubBranchLister{},
+		sourceControl,
+		stubDeploymentLister{
+			deployments: []domain.VercelDeployment{
+				{
+					ID:                "dpl_1",
+					Name:              "app",
+					PullRequestNumber: &prNumber,
+					SourceRepository:  "RishabJain30/other-repo",
+					CreatedAt:         mature,
+				},
+			},
+		},
+		fixedClock,
+	)
+
+	_, err := service.Scan(context.Background(), Config{
+		// --repo names a different repository than the deployment's own
+		// Git metadata: the deployment's metadata must win.
+		Repository:      "RishabJain30/sweep-lifecycle",
+		VercelProjectID: "prj_1",
+	})
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	if len(sourceControl.pullRequestRepositories) != 1 {
+		t.Fatalf(
+			"PR lookups = %v, want exactly one",
+			sourceControl.pullRequestRepositories,
+		)
+	}
+
+	if got := sourceControl.pullRequestRepositories[0]; got != "RishabJain30/other-repo" {
+		t.Fatalf(
+			"repository queried = %q, want the deployment's own "+
+				"SourceRepository %q, not --repo",
+			got,
+			"RishabJain30/other-repo",
+		)
+	}
+}
+
+func TestDeploymentRepositoryPrefersSourceRepositoryOverFallback(t *testing.T) {
+	tests := []struct {
+		name             string
+		sourceRepository string
+		fallback         string
+		want             string
+	}{
+		{
+			name:             "uses source repository when present",
+			sourceRepository: "RishabJain30/web",
+			fallback:         "RishabJain30/other",
+			want:             "RishabJain30/web",
+		},
+		{
+			name:             "falls back when source repository is empty",
+			sourceRepository: "",
+			fallback:         "RishabJain30/other",
+			want:             "RishabJain30/other",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := DeploymentRepository(
+				domain.VercelDeployment{SourceRepository: test.sourceRepository},
+				test.fallback,
+			)
+
+			if got != test.want {
+				t.Fatalf("DeploymentRepository() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 
