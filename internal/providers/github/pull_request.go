@@ -16,6 +16,10 @@ type apiPullRequest struct {
 	Head struct {
 		Ref string `json:"ref"`
 		SHA string `json:"sha"`
+
+		Repository *struct {
+			FullName string `json:"full_name"`
+		} `json:"repo"`
 	} `json:"head"`
 
 	Base struct {
@@ -27,18 +31,24 @@ type apiPullRequest struct {
 
 func (pr apiPullRequest) toDomain() (domain.PullRequest, error) {
 	state, err := mapPullRequestState(pr.State, pr.MergedAt)
+	var headRepository string
+
+	if pr.Head.Repository != nil {
+		headRepository = pr.Head.Repository.FullName
+	}
 	if err != nil {
 		return domain.PullRequest{}, err
 	}
 
 	return domain.PullRequest{
-		Repository: pr.Base.Repository.FullName,
-		Number:     pr.Number,
-		HeadBranch: pr.Head.Ref,
-		HeadSHA:    pr.Head.SHA,
-		State:      state,
-		ClosedAt:   pr.ClosedAt,
-		MergedAt:   pr.MergedAt,
+		Repository:     pr.Base.Repository.FullName,
+		Number:         pr.Number,
+		HeadRepository: headRepository,
+		HeadBranch:     pr.Head.Ref,
+		HeadSHA:        pr.Head.SHA,
+		State:          state,
+		ClosedAt:       pr.ClosedAt,
+		MergedAt:       pr.MergedAt,
 	}, nil
 }
 

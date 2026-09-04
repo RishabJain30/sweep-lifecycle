@@ -117,6 +117,69 @@ func (c *Client) GetPullRequest(
 	return pr, nil
 }
 
+// BranchExists reports whether a branch currently exists in a GitHub repository.
+func (c *Client) BranchExists(
+	ctx context.Context,
+	repository string,
+	branch string,
+) (bool, error) {
+	owner, name, err := parseRepository(repository)
+	if err != nil {
+		return false, err
+	}
+
+	if strings.TrimSpace(branch) == "" {
+		return false, errors.New("branch name is required")
+	}
+
+	endpoint := fmt.Sprintf(
+		"%s/repos/%s/%s/branches/%s",
+		strings.TrimRight(c.baseURL, "/"),
+		url.PathEscape(owner),
+		url.PathEscape(name),
+		url.PathEscape(branch),
+	)
+
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		endpoint,
+		nil,
+	)
+	if err != nil {
+		return false, fmt.Errorf(
+			"create GitHub branch request: %w",
+			err,
+		)
+	}
+
+	request.Header.Set("Authorization", "Bearer "+c.token)
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	request.Header.Set("User-Agent", "sweep")
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return false, fmt.Errorf(
+			"send GitHub branch request: %w",
+			err,
+		)
+	}
+	defer response.Body.Close()
+
+	switch response.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, fmt.Errorf(
+			"GitHub API returned %s while checking branch",
+			response.Status,
+		)
+	}
+}
+
 // parseRepository separates an owner/name repository identifier.
 func parseRepository(repository string) (string, string, error) {
 	parts := strings.Split(repository, "/")
