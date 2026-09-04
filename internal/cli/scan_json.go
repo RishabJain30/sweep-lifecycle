@@ -19,6 +19,7 @@ const highConfidenceLevel = scoring.ConfidenceHigh
 type jsonReport struct {
 	Providers  []jsonProviderStatus `json:"providers"`
 	Candidates []jsonCandidate      `json:"candidates"`
+	Uncertain  []jsonCandidate      `json:"uncertain"`
 	Skipped    []jsonSkipped        `json:"skipped"`
 	Warnings   []jsonWarning        `json:"warnings"`
 	Summary    jsonSummary          `json:"summary"`
@@ -55,6 +56,7 @@ type jsonScore struct {
 	PolicyVersion  string         `json:"policy_version"`
 	Value          int            `json:"value"`
 	Confidence     string         `json:"confidence"`
+	Recommended    bool           `json:"recommended"`
 	Recommendation string         `json:"recommendation"`
 	Evidence       []jsonEvidence `json:"evidence"`
 }
@@ -81,6 +83,7 @@ type jsonWarning struct {
 type jsonSummary struct {
 	CandidateCount      int `json:"candidate_count"`
 	HighConfidenceCount int `json:"high_confidence_count"`
+	UncertainCount      int `json:"uncertain_count"`
 	SkippedCount        int `json:"skipped_count"`
 	WarningCount        int `json:"warning_count"`
 }
@@ -90,6 +93,7 @@ func toJSONReport(result scanservice.Result) jsonReport {
 	report := jsonReport{
 		Providers:  make([]jsonProviderStatus, 0, len(result.ProviderStatuses)),
 		Candidates: make([]jsonCandidate, 0, len(result.Candidates)),
+		Uncertain:  make([]jsonCandidate, 0, len(result.Uncertain)),
 		Skipped:    make([]jsonSkipped, 0, len(result.Skipped)),
 		Warnings:   make([]jsonWarning, 0, len(result.Warnings)),
 	}
@@ -112,6 +116,10 @@ func toJSONReport(result scanservice.Result) jsonReport {
 		report.Candidates = append(report.Candidates, toJSONCandidate(candidate))
 	}
 
+	for _, candidate := range result.Uncertain {
+		report.Uncertain = append(report.Uncertain, toJSONCandidate(candidate))
+	}
+
 	for _, skipped := range result.Skipped {
 		report.Skipped = append(report.Skipped, jsonSkipped{
 			Provider:     skipped.Provider,
@@ -132,6 +140,7 @@ func toJSONReport(result scanservice.Result) jsonReport {
 	report.Summary = jsonSummary{
 		CandidateCount:      len(report.Candidates),
 		HighConfidenceCount: highConfidence,
+		UncertainCount:      len(report.Uncertain),
 		SkippedCount:        len(report.Skipped),
 		WarningCount:        len(report.Warnings),
 	}
@@ -168,6 +177,7 @@ func toJSONScore(candidate scanservice.Candidate) jsonScore {
 		PolicyVersion:  candidate.Score.PolicyVersion,
 		Value:          candidate.Score.Score,
 		Confidence:     string(candidate.Score.Confidence),
+		Recommended:    candidate.Score.Recommended,
 		Recommendation: candidate.Score.Recommendation,
 		Evidence:       make([]jsonEvidence, 0, len(candidate.Score.Contributions)),
 	}

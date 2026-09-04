@@ -37,6 +37,7 @@ func sampleResult() scanservice.Result {
 					PolicyVersion:  scoring.PolicyVersion,
 					Score:          78,
 					Confidence:     scoring.ConfidenceHigh,
+					Recommended:    true,
 					Recommendation: "Strong cleanup candidate: finished pull request and missing source branch.",
 					Contributions: []scoring.Contribution{
 						{
@@ -48,6 +49,29 @@ func sampleResult() scanservice.Result {
 							Kind:        evidence.KindSourceBranchMissing,
 							Description: "The pull request's source branch no longer exists on GitHub.",
 							Points:      35,
+						},
+					},
+				},
+			},
+		},
+		Uncertain: []scanservice.Candidate{
+			{
+				Provider:            "neon",
+				ResourceID:          "br-uncertain",
+				ResourceName:        "preview-pr-3",
+				PullRequestFound:    false,
+				SourceBranchChecked: false,
+				Score: scoring.Result{
+					PolicyVersion:  scoring.PolicyVersion,
+					Score:          8,
+					Confidence:     scoring.ConfidenceLow,
+					Recommended:    false,
+					Recommendation: "Insufficient evidence to recommend cleanup: keep this resource.",
+					Contributions: []scoring.Contribution{
+						{
+							Kind:        evidence.KindNamingConventionMatch,
+							Description: "Resource name matches Sweep's recognized preview-resource naming convention.",
+							Points:      8,
 						},
 					},
 				},
@@ -127,7 +151,9 @@ func TestScanCommandPrintsTextReport(t *testing.T) {
 		"neon br-prod (production): resource is marked default, protected, or production-like",
 		"Warnings (1):",
 		"could not retrieve pull request #2",
-		"Summary: 1 candidate(s) (1 high confidence), 1 skipped, 1 warning(s)",
+		"Uncertain / low-confidence resources (1):",
+		"neon br-uncertain (preview-pr-3)",
+		"Summary: 1 candidate(s) (1 high confidence), 1 uncertain, 1 skipped, 1 warning(s)",
 	}
 
 	for _, want := range wantParts {
@@ -189,11 +215,25 @@ func TestScanCommandPrintsJSONReport(t *testing.T) {
 		t.Fatalf("score value = %d, want 78", report.Candidates[0].Score.Value)
 	}
 
+	if !report.Candidates[0].Score.Recommended {
+		t.Fatal("candidate Recommended = false, want true")
+	}
+
+	if len(report.Uncertain) != 1 ||
+		report.Uncertain[0].ResourceID != "br-uncertain" {
+		t.Fatalf("uncertain = %+v, want br-uncertain", report.Uncertain)
+	}
+
+	if report.Uncertain[0].Score.Recommended {
+		t.Fatal("uncertain Recommended = true, want false")
+	}
+
 	if report.Summary.CandidateCount != 1 ||
 		report.Summary.HighConfidenceCount != 1 ||
+		report.Summary.UncertainCount != 1 ||
 		report.Summary.SkippedCount != 1 ||
 		report.Summary.WarningCount != 1 {
-		t.Fatalf("summary = %+v, want 1/1/1/1", report.Summary)
+		t.Fatalf("summary = %+v, want 1/1/1/1/1", report.Summary)
 	}
 
 	if len(report.Providers) != 2 {

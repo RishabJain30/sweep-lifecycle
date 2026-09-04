@@ -81,6 +81,21 @@ type Result struct {
 	Excluded        bool
 	ExclusionReason string
 
+	// Recommended reports whether the evidence clears the bar to actually
+	// call this resource a cleanup candidate: not excluded, Score at or
+	// above thresholdMedium, AND Confidence above LOW. The confidence
+	// check matters on its own: a merged PR plus enough corroborating
+	// signals (naming, age) can clear thresholdMedium by score alone even
+	// when the source-branch check itself failed, but incomplete evidence
+	// must never be presented as a recommendation just because the
+	// unrelated signals summed high enough. Structurally, clearing both
+	// gates requires either a finished pull request or a confirmed
+	// missing source branch (see the weight comment above) - naming
+	// alone, age alone, or a resource whose lookup merely failed can
+	// never set this true. A resource that isn't Recommended is still
+	// reported (as "uncertain"), just never presented as a candidate.
+	Recommended bool
+
 	Recommendation string
 	Contributions  []Contribution
 }
@@ -100,6 +115,9 @@ func Evaluate(items []evidence.Item) Result {
 
 	result.Score = score
 	result.Confidence = confidenceFor(kinds, score)
+	result.Recommended = !result.Excluded &&
+		score >= thresholdMedium &&
+		result.Confidence != ConfidenceLow
 	result.Contributions = contributionsFor(items)
 	result.Recommendation = recommendationFor(result)
 

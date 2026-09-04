@@ -337,6 +337,91 @@ func TestEvaluateEmptyEvidenceNeverRecommendsCleanup(t *testing.T) {
 	}
 }
 
+func TestEvaluateRecommendedRequiresClearingTheMediumThreshold(t *testing.T) {
+	tests := []struct {
+		name          string
+		items         []evidence.Item
+		wantRecommend bool
+	}{
+		{
+			name: "merged and missing branch is recommended",
+			items: []evidence.Item{
+				{Kind: evidence.KindPullRequestMerged},
+				{Kind: evidence.KindSourceBranchMissing},
+			},
+			wantRecommend: true,
+		},
+		{
+			name: "merged PR with the branch still present is not recommended",
+			items: []evidence.Item{
+				{Kind: evidence.KindPullRequestMerged},
+				{Kind: evidence.KindSourceBranchExists},
+			},
+			wantRecommend: false,
+		},
+		{
+			name: "naming match alone is not recommended",
+			items: []evidence.Item{
+				{Kind: evidence.KindPullRequestUnknown},
+				{Kind: evidence.KindNamingConventionMatch},
+			},
+			wantRecommend: false,
+		},
+		{
+			name: "a failed lookup alone is not recommended",
+			items: []evidence.Item{
+				{Kind: evidence.KindPullRequestUnknown},
+				{Kind: evidence.KindLookupIncomplete},
+			},
+			wantRecommend: false,
+		},
+		{
+			name: "protected resource is never recommended despite strong evidence",
+			items: []evidence.Item{
+				{Kind: evidence.KindProtectedResource},
+				{Kind: evidence.KindPullRequestMerged},
+				{Kind: evidence.KindSourceBranchMissing},
+			},
+			wantRecommend: false,
+		},
+		{
+			name: "open pull request is never recommended",
+			items: []evidence.Item{
+				{Kind: evidence.KindPullRequestOpen},
+			},
+			wantRecommend: false,
+		},
+		{
+			// merged (+30) + naming (+8) + mature (+5) = 43, which alone
+			// clears thresholdMedium (35) - but the branch check itself
+			// failed, so this must not be recommended despite the score.
+			name: "high score from unrelated signals is not recommended when the branch check failed",
+			items: []evidence.Item{
+				{Kind: evidence.KindPullRequestMerged},
+				{Kind: evidence.KindNamingConventionMatch},
+				{Kind: evidence.KindResourceAgeMature},
+				{Kind: evidence.KindLookupIncomplete},
+			},
+			wantRecommend: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := Evaluate(test.items)
+
+			if result.Recommended != test.wantRecommend {
+				t.Fatalf(
+					"Recommended = %v (score %d), want %v",
+					result.Recommended,
+					result.Score,
+					test.wantRecommend,
+				)
+			}
+		})
+	}
+}
+
 func TestPolicyVersionIsSet(t *testing.T) {
 	result := Evaluate([]evidence.Item{
 		{Kind: evidence.KindPullRequestOpen},

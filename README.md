@@ -151,11 +151,14 @@ GITHUB_TOKEN=*** NEON_API_KEY=*** VERCEL_TOKEN=*** \
 sweep scan --repo owner/name --neon-project my-project --format json
 ```
 
-Text output is organized into five sections, in order: provider discovery
-status, cleanup candidates (each with its correlated PR, source-branch
-status, deterministic evidence, score, and confidence), protected/skipped
-resources with their exclusion reason, warnings from any partial failures,
-and summary counts.
+Text output is organized into six sections, in order: provider discovery
+status; cleanup candidates (each with its correlated PR, source-branch
+status, deterministic evidence, score, and confidence — only resources
+`scoring.Result.Recommended` actually clears land here); uncertain/
+low-confidence resources that were evaluated but don't clear the bar to
+recommend cleanup (a low score, or evidence left incomplete by a failed
+provider lookup); protected/skipped resources with their exclusion reason;
+warnings from any partial failures; and summary counts.
 
 ## `explain` examples
 
@@ -187,15 +190,36 @@ applicable) why it was excluded.
       "policy_version": "v1",
       "value": 78,
       "confidence": "HIGH",
+      "recommended": true,
       "recommendation": "...",
       "evidence": [{"kind": "pull_request_merged", "description": "...", "points": 30}]
     }
   }],
+  "uncertain": [{"...": "same shape as candidates, but recommended is false"}],
   "skipped": [{"provider": "neon", "resource_id": "...", "resource_name": "...", "reason": "..."}],
   "warnings": [{"provider": "neon", "resource": "...", "message": "..."}],
-  "summary": {"candidate_count": 1, "high_confidence_count": 1, "skipped_count": 0, "warning_count": 0}
+  "summary": {
+    "candidate_count": 1,
+    "high_confidence_count": 1,
+    "uncertain_count": 0,
+    "skipped_count": 0,
+    "warning_count": 0
+  }
 }
 ```
+
+`candidates` only ever contains resources whose score `Recommended`; a
+resource that was evaluated but doesn't clear that bar (including one
+whose GitHub lookup failed, since incomplete evidence must never be
+presented as a recommendation) appears in `uncertain` instead, with
+`score.recommended: false`. `candidate_count` and `uncertain_count` reflect
+this split, so scripts consuming this JSON never need their own
+score-thresholding logic to find genuine recommendations.
+
+A Vercel *discovery* failure (as opposed to a single deployment's GitHub
+lookup failing) is reported as a `providers` entry with
+`"status": "error"` rather than aborting the scan — any Neon results
+already gathered are still returned in full.
 
 This schema is covered by tests in
 [`internal/cli/scan_test.go`](internal/cli/scan_test.go) and is considered
@@ -232,6 +256,12 @@ there with the reasoning behind each one.
 - A systemic GitHub failure (for example, an invalid token) surfaces as one
   warning per resource rather than a single aggregate error, since each
   resource's GitHub lookup is evaluated independently.
+- GitHub returns 404 both when a branch is missing and when the repository
+  itself is nonexistent or inaccessible to the token. Sweep disambiguates
+  by separately confirming repository access before trusting a branch 404
+  as "missing" (see `BranchExists` in
+  [`internal/providers/github/client.go`](internal/providers/github/client.go)),
+  which costs one extra API call whenever a branch check 404s.
 - Sweep does not paginate around GitHub or Neon or Vercel rate limits; a
   very large project may need multiple runs if a provider throttles it.
 - There is no persistent state. Every `scan` re-discovers and

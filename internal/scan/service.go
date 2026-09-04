@@ -47,17 +47,25 @@ type Warning struct {
 }
 
 // ProviderStatus reports whether a provider was queried, skipped because
-// it is not configured, and how many resources it returned.
+// it is not configured, or failed, and how many resources it returned.
 type ProviderStatus struct {
 	Provider string
-	Status   string // "ok" or "skipped"
+	Status   string // "ok", "skipped", or "error"
 	Detail   string
 }
 
 // Result is the complete, honest outcome of one scan.
+//
+// Candidates only holds resources scoring.Result.Recommended is true for -
+// evidence that actually clears the bar to call something a cleanup
+// candidate. A resource that was correlated and evaluated but didn't clear
+// that bar (a low score, or evidence that stayed incomplete after a
+// provider lookup failed) lands in Uncertain instead: it is still fully
+// reported, just never presented as something worth cleaning up.
 type Result struct {
 	ProviderStatuses []ProviderStatus
 	Candidates       []Candidate
+	Uncertain        []Candidate
 	Skipped          []Skipped
 	Warnings         []Warning
 }
@@ -101,8 +109,11 @@ func NewService(
 
 // Scan discovers preview resources from every configured provider,
 // correlates each with a GitHub pull request, and evaluates deterministic
-// evidence and score for every result. A discovery failure for a
-// configured provider fails the whole scan; a failure evaluating one
+// evidence and score for every result. A discovery failure for a required
+// provider (Neon) fails the whole scan, since nothing useful can be
+// reported without it. Vercel is optional, so a Vercel discovery failure
+// is instead recorded as a ProviderStatus of "error" and every already-
+// discovered Neon result is still returned. A failure evaluating one
 // resource is recorded as a Warning and every other resource is still
 // reported.
 func (service *Service) Scan(
@@ -146,7 +157,18 @@ func (service *Service) Scan(
 		cfg.VercelProjectID,
 	)
 	if err != nil {
-		return Result{}, fmt.Errorf("list Vercel deployments: %w", err)
+		// Vercel is optional: a failure discovering it must not discard
+		// the Neon results already gathered above.
+		result.ProviderStatuses = append(
+			result.ProviderStatuses,
+			ProviderStatus{
+				Provider: "vercel",
+				Status:   "error",
+				Detail:   fmt.Sprintf("discovery failed: %s", err),
+			},
+		)
+
+		return result, nil
 	}
 
 	result.ProviderStatuses = append(result.ProviderStatuses, ProviderStatus{
@@ -248,6 +270,12 @@ func DeploymentRepository(
 	return fallbackRepository
 }
 
+// record buckets one evaluated resource into exactly one of Result's three
+// collections. A resource only ever becomes a Candidate when
+// scoring.Result.Recommended is true; anything else that wasn't excluded
+// (a low score, or evidence left incomplete by a failed lookup) is
+// reported as Uncertain instead, so scan's headline "cleanup candidates"
+// count only ever reflects genuine recommendations.
 func record(result *Result, candidate Candidate, warning string) {
 	if warning != "" {
 		result.Warnings = append(result.Warnings, Warning{
@@ -257,16 +285,17 @@ func record(result *Result, candidate Candidate, warning string) {
 		})
 	}
 
-	if candidate.Score.Excluded {
+	switch {
+	case candidate.Score.Excluded:
 		result.Skipped = append(result.Skipped, Skipped{
 			Provider:     candidate.Provider,
 			ResourceID:   candidate.ResourceID,
 			ResourceName: candidate.ResourceName,
 			Reason:       candidate.Score.ExclusionReason,
 		})
-
-		return
+	case candidate.Score.Recommended:
+		result.Candidates = append(result.Candidates, candidate)
+	default:
+		result.Uncertain = append(result.Uncertain, candidate)
 	}
-
-	result.Candidates = append(result.Candidates, candidate)
 }

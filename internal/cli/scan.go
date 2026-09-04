@@ -111,7 +111,8 @@ func newScanCommand(run scanRunner) *cobra.Command {
 
 // writeTextReport renders a practical, human-readable cleanup-candidate
 // report: provider discovery status, candidates with their evidence and
-// score, protected/skipped resources, warnings, and summary counts.
+// score, uncertain/low-confidence resources, protected/skipped resources,
+// warnings, and summary counts.
 func writeTextReport(w io.Writer, result scanservice.Result) error {
 	fprintf := func(format string, args ...any) error {
 		_, err := fmt.Fprintf(w, format, args...)
@@ -147,26 +148,28 @@ func writeTextReport(w io.Writer, result scanservice.Result) error {
 	}
 
 	for _, candidate := range result.Candidates {
-		if err := fprintf(
-			"\n  %s %s (%s)\n",
-			candidate.Provider,
-			candidate.ResourceID,
-			candidate.ResourceName,
-		); err != nil {
+		if err := writeCandidateBlock(w, candidate); err != nil {
 			return err
 		}
+	}
 
-		if err := writePullRequestDetails(
-			w,
-			candidate.PullRequest,
-			candidate.PullRequestFound,
-			candidate.SourceBranchChecked,
-			candidate.SourceBranchExists,
-		); err != nil {
+	if err := fprintf(
+		"\nUncertain / low-confidence resources (%d):\n"+
+			"  Evaluated, but evidence does not clear the bar to "+
+			"recommend cleanup.\n",
+		len(result.Uncertain),
+	); err != nil {
+		return err
+	}
+
+	if len(result.Uncertain) == 0 {
+		if err := fprintf("  (none)\n"); err != nil {
 			return err
 		}
+	}
 
-		if err := writeScore(w, candidate.Score); err != nil {
+	for _, candidate := range result.Uncertain {
+		if err := writeCandidateBlock(w, candidate); err != nil {
 			return err
 		}
 	}
@@ -228,13 +231,43 @@ func writeTextReport(w io.Writer, result scanservice.Result) error {
 	}
 
 	return fprintf(
-		"\nSummary: %d candidate(s) (%d high confidence), %d skipped, "+
-			"%d warning(s)\n",
+		"\nSummary: %d candidate(s) (%d high confidence), %d uncertain, "+
+			"%d skipped, %d warning(s)\n",
 		len(result.Candidates),
 		highConfidence,
+		len(result.Uncertain),
 		len(result.Skipped),
 		len(result.Warnings),
 	)
+}
+
+// writeCandidateBlock renders one resource's identity, correlated pull
+// request, source-branch status, and score. Both the "Cleanup candidates"
+// and "Uncertain" sections use it, since a Candidate is the same struct in
+// either bucket - only Result.Recommended decided which section it landed
+// in.
+func writeCandidateBlock(w io.Writer, candidate scanservice.Candidate) error {
+	if _, err := fmt.Fprintf(
+		w,
+		"\n  %s %s (%s)\n",
+		candidate.Provider,
+		candidate.ResourceID,
+		candidate.ResourceName,
+	); err != nil {
+		return err
+	}
+
+	if err := writePullRequestDetails(
+		w,
+		candidate.PullRequest,
+		candidate.PullRequestFound,
+		candidate.SourceBranchChecked,
+		candidate.SourceBranchExists,
+	); err != nil {
+		return err
+	}
+
+	return writeScore(w, candidate.Score)
 }
 
 func writeJSONReport(w io.Writer, result scanservice.Result) error {

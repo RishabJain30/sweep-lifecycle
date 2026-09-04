@@ -344,12 +344,20 @@ func TestServiceScanPullRequestFailureBecomesWarningNotHardFailure(t *testing.T)
 		)
 	}
 
-	candidate, found := findCandidate(result.Candidates, "")
+	if len(result.Candidates) != 0 {
+		t.Fatalf(
+			"candidates = %+v, want none: incomplete evidence must "+
+				"never be reported as a cleanup candidate",
+			result.Candidates,
+		)
+	}
+
+	candidate, found := findCandidate(result.Uncertain, "")
 	if !found {
 		t.Fatalf(
-			"candidates = %+v, want the unresolved PR to still be "+
+			"uncertain = %+v, want the unresolved PR to still be "+
 				"reported",
-			result.Candidates,
+			result.Uncertain,
 		)
 	}
 
@@ -410,9 +418,17 @@ func TestServiceScanBranchLookupFailureBecomesWarningNotHardFailure(t *testing.T
 		)
 	}
 
-	candidate, found := findCandidate(result.Candidates, "br-preview")
+	if len(result.Candidates) != 0 {
+		t.Fatalf(
+			"candidates = %+v, want none: incomplete evidence must "+
+				"never be reported as a cleanup candidate",
+			result.Candidates,
+		)
+	}
+
+	candidate, found := findCandidate(result.Uncertain, "br-preview")
 	if !found {
-		t.Fatalf("candidates = %+v, want br-preview", result.Candidates)
+		t.Fatalf("uncertain = %+v, want br-preview", result.Uncertain)
 	}
 
 	if candidate.Score.Confidence != scoring.ConfidenceLow {
@@ -420,6 +436,63 @@ func TestServiceScanBranchLookupFailureBecomesWarningNotHardFailure(t *testing.T
 			"Confidence = %s, want %s when the branch check failed",
 			candidate.Score.Confidence,
 			scoring.ConfidenceLow,
+		)
+	}
+}
+
+// TestServiceScanMergedPRWithExistingBranchIsUncertainNotCandidate covers
+// a merged PR whose branch was never deleted: score clamps to 0 (the
+// existing branch is a strong negative signal), so it must be reported as
+// Uncertain, not presented as a cleanup candidate.
+func TestServiceScanMergedPRWithExistingBranchIsUncertainNotCandidate(t *testing.T) {
+	sourceControl := &stubSourceControl{
+		pullRequests: map[int]domain.PullRequest{
+			1: {
+				Number:         1,
+				State:          domain.PullRequestStateMerged,
+				HeadRepository: "RishabJain30/sweep-lifecycle",
+				HeadBranch:     "feat/example",
+			},
+		},
+		branchExists: true,
+	}
+
+	service := NewService(
+		stubBranchLister{
+			branches: []domain.DatabaseBranch{
+				{
+					ID:        "br-preview",
+					Name:      "preview-pr-1",
+					CreatedAt: mature,
+					UpdatedAt: mature,
+				},
+			},
+		},
+		sourceControl,
+		nil,
+		fixedClock,
+	)
+
+	result, err := service.Scan(context.Background(), Config{
+		Repository:    "RishabJain30/sweep-lifecycle",
+		NeonProjectID: "test-project",
+	})
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	if len(result.Candidates) != 0 {
+		t.Fatalf(
+			"candidates = %+v, want none: a merged PR whose branch "+
+				"still exists must never be a cleanup candidate",
+			result.Candidates,
+		)
+	}
+
+	if _, found := findCandidate(result.Uncertain, "br-preview"); !found {
+		t.Fatalf(
+			"uncertain = %+v, want br-preview reported as uncertain",
+			result.Uncertain,
 		)
 	}
 }
@@ -766,23 +839,86 @@ func TestDeploymentRepositoryPrefersSourceRepositoryOverFallback(t *testing.T) {
 	}
 }
 
-func TestServiceScanReturnsVercelDiscoveryError(t *testing.T) {
+// TestServiceScanVercelDiscoveryFailurePreservesNeonResults ensures a
+// failure discovering the optional Vercel provider never discards Neon
+// results already gathered: Vercel is reported as a failed ProviderStatus,
+// but the scan as a whole still succeeds with everything Neon found.
+func TestServiceScanVercelDiscoveryFailurePreservesNeonResults(t *testing.T) {
 	service := NewService(
-		stubBranchLister{},
-		&stubSourceControl{},
+		stubBranchLister{
+			branches: []domain.DatabaseBranch{
+				{
+					ID:        "br-preview",
+					Name:      "preview-pr-1",
+					CreatedAt: mature,
+					UpdatedAt: mature,
+				},
+			},
+		},
+		&stubSourceControl{
+			pullRequests: map[int]domain.PullRequest{
+				1: {
+					Number:         1,
+					State:          domain.PullRequestStateMerged,
+					HeadRepository: "RishabJain30/sweep-lifecycle",
+					HeadBranch:     "feat/example",
+				},
+			},
+		},
 		stubDeploymentLister{err: errors.New("connection failed")},
 		fixedClock,
 	)
 
-	_, err := service.Scan(context.Background(), Config{
+	result, err := service.Scan(context.Background(), Config{
 		Repository:      "RishabJain30/sweep-lifecycle",
+		NeonProjectID:   "test-project",
 		VercelProjectID: "prj_1",
 	})
-	if err == nil {
-		t.Fatal("Scan() error = nil, want an error")
+	if err != nil {
+		t.Fatalf(
+			"Scan() error = %v, want no error: an optional provider's "+
+				"discovery failure must not fail the whole scan",
+			err,
+		)
 	}
 
-	if !strings.Contains(err.Error(), "list Vercel deployments") {
-		t.Fatalf("error = %q, want Vercel context", err)
+	if _, found := findCandidate(result.Candidates, "br-preview"); !found {
+		t.Fatalf(
+			"candidates = %+v, want the Neon result preserved despite "+
+				"the Vercel failure",
+			result.Candidates,
+		)
+	}
+
+	var vercelStatus ProviderStatus
+	found := false
+
+	for _, status := range result.ProviderStatuses {
+		if status.Provider == "vercel" {
+			vercelStatus = status
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf(
+			"provider statuses = %+v, want a vercel entry",
+			result.ProviderStatuses,
+		)
+	}
+
+	if vercelStatus.Status != "error" {
+		t.Fatalf(
+			"vercel status = %q, want %q",
+			vercelStatus.Status,
+			"error",
+		)
+	}
+
+	if !strings.Contains(vercelStatus.Detail, "connection failed") {
+		t.Fatalf(
+			"vercel detail = %q, want it to explain the failure",
+			vercelStatus.Detail,
+		)
 	}
 }
