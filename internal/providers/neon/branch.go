@@ -11,6 +11,10 @@ type apiListBranchesResponse struct {
 	Pagination apiPagination `json:"pagination"`
 }
 
+type apiGetBranchResponse struct {
+	Branch apiBranch `json:"branch"`
+}
+
 type apiPagination struct {
 	Next *string `json:"next"`
 }

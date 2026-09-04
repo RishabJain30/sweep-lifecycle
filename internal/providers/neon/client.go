@@ -107,32 +107,11 @@ func (c *Client) listBranchesPage(
 
 	endpoint.RawQuery = query.Encode()
 
-	request, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		endpoint.String(),
-		nil,
-	)
+	response, err := c.get(ctx, endpoint.String())
 	if err != nil {
-		return nil, "", fmt.Errorf("create Neon request: %w", err)
-	}
-
-	request.Header.Set("Authorization", "Bearer "+c.token)
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "sweep")
-
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return nil, "", fmt.Errorf("send Neon request: %w", err)
+		return nil, "", err
 	}
 	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf(
-			"Neon API returned %s",
-			response.Status,
-		)
-	}
 
 	var apiResponse apiListBranchesResponse
 	if err := json.NewDecoder(response.Body).Decode(&apiResponse); err != nil {
@@ -154,4 +133,80 @@ func (c *Client) listBranchesPage(
 	}
 
 	return branches, nextCursor, nil
+}
+
+// GetBranch retrieves a single branch by ID.
+func (c *Client) GetBranch(
+	ctx context.Context,
+	projectID string,
+	branchID string,
+) (domain.DatabaseBranch, error) {
+	if strings.TrimSpace(projectID) == "" {
+		return domain.DatabaseBranch{}, errors.New(
+			"Neon project ID is required",
+		)
+	}
+
+	if strings.TrimSpace(branchID) == "" {
+		return domain.DatabaseBranch{}, errors.New(
+			"Neon branch ID is required",
+		)
+	}
+
+	endpoint := strings.TrimRight(c.baseURL, "/") +
+		"/projects/" +
+		url.PathEscape(projectID) +
+		"/branches/" +
+		url.PathEscape(branchID)
+
+	response, err := c.get(ctx, endpoint)
+	if err != nil {
+		return domain.DatabaseBranch{}, err
+	}
+	defer response.Body.Close()
+
+	var apiResponse apiGetBranchResponse
+	if err := json.NewDecoder(response.Body).Decode(&apiResponse); err != nil {
+		return domain.DatabaseBranch{}, fmt.Errorf(
+			"decode Neon response: %w",
+			err,
+		)
+	}
+
+	return apiResponse.Branch.toDomain(), nil
+}
+
+// get sends an authenticated GET request and returns the response for the
+// caller to decode. Callers must close the response body. A non-200 status
+// is translated into a descriptive error.
+func (c *Client) get(
+	ctx context.Context,
+	endpoint string,
+) (*http.Response, error) {
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		endpoint,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create Neon request: %w", err)
+	}
+
+	request.Header.Set("Authorization", "Bearer "+c.token)
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", "sweep")
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("send Neon request: %w", err)
+	}
+
+	if response.StatusCode != http.StatusOK {
+		defer response.Body.Close()
+
+		return nil, fmt.Errorf("Neon API returned %s", response.Status)
+	}
+
+	return response, nil
 }
