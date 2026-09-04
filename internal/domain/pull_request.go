@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 type PullRequestState string
 
 const (
@@ -14,6 +16,8 @@ type PullRequest struct {
 	HeadBranch string
 	HeadSHA    string
 	State      PullRequestState
+	ClosedAt   *time.Time
+	MergedAt   *time.Time
 }
 
 func (pr PullRequest) IsFinished() bool {
