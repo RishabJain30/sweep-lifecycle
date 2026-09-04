@@ -25,7 +25,7 @@ func newScanCommand(run scanRunner) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "scan",
-		Short: "Find stale engineering resources",
+		Short: "Correlate preview resources with pull requests",
 		Args:  cobra.NoArgs,
 		PreRunE: func(_ *cobra.Command, _ []string) error {
 			if strings.TrimSpace(repository) == "" {
