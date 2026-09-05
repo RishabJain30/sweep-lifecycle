@@ -167,6 +167,14 @@ func TestExtractPullRequestNumberInvalid(t *testing.T) {
 			name:         "PR number overflowing int is rejected safely",
 			resourceName: "preview-pr-99999999999999999999",
 		},
+		{
+			name:         "suffix embeds a second complete preview-pr pattern (dash)",
+			resourceName: "preview-pr-42-preview-pr-9",
+		},
+		{
+			name:         "suffix embeds a second complete preview-pr pattern (slash)",
+			resourceName: "preview/pr-42-preview-pr-9",
+		},
 	}
 
 	for _, test := range tests {

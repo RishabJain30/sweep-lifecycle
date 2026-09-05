@@ -137,9 +137,12 @@ present, must be one or more `-`-separated lowercase alphanumeric segments
 — for example `preview-pr-42-checkout` or `preview/pr-7-hotfix-retry`.
 This is intentionally conservative: the match is anchored to the entire
 branch name, so nothing extra before `preview` (`old-preview-pr-1`) or
-after the suffix is allowed, the separator between `preview` and `pr-` is
-only `-` or `/`, and the suffix can never contain uppercase letters, a
-`/`, or the `preview`/`pr-` shape itself. A branch named `production`,
+after the suffix is allowed, and the separator between `preview` and `pr-`
+is only `-` or `/`. The suffix can never contain uppercase letters or a
+`/`, and it is rejected outright if it spells out a second complete
+`preview-pr-<number>` or `preview/pr-<number>` shape (for example
+`preview-pr-42-preview-pr-9`), since that would leave it ambiguous which
+PR number the branch actually belongs to. A branch named `production`,
 `staging`, or anything else that doesn't match one of the four forms above
 is never correlated with a pull request by name.
 
