@@ -1,0 +1,39 @@
+version: 2
+
+project_name: sweep
+
+builds:
+  - id: sweep
+    main: ./cmd/sweep
+    binary: sweep
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/RishabJain30/sweep-lifecycle/internal/version.Version={{ .Version }}
+      - -X github.com/RishabJain30/sweep-lifecycle/internal/version.Commit={{ .Commit }}
+      - -X github.com/RishabJain30/sweep-lifecycle/internal/version.BuildDate={{ .Date }}
+
+archives:
+  - id: sweep
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  disable: true

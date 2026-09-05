@@ -72,7 +72,9 @@ internal/scan          Orchestrates discovery + correlation + evidence +
 resource into evidence and a score. Neither command duplicates the other's
 reasoning.
 
-## Installation and local build
+## Installation
+
+### Build from source
 
 Requires Go 1.26+ (see `go.mod` for the exact version).
 
@@ -87,6 +89,48 @@ Or run directly without building a binary:
 ```bash
 go run ./cmd/sweep scan --repo owner/name --neon-project <project-id>
 ```
+
+### Install with `go install`
+
+```bash
+go install github.com/RishabJain30/sweep-lifecycle/cmd/sweep@latest
+```
+
+This builds from source and installs the `sweep` binary into
+`$(go env GOPATH)/bin` (or `$GOBIN`).
+
+### Download a release binary
+
+Every tagged version publishes prebuilt binaries for macOS, Linux, and
+Windows (amd64 and arm64) to the
+[GitHub Releases page](https://github.com/RishabJain30/sweep-lifecycle/releases),
+along with a `checksums.txt` to verify the download:
+
+```bash
+curl -LO https://github.com/RishabJain30/sweep-lifecycle/releases/download/v0.1.0/sweep_v0.1.0_darwin_arm64.tar.gz
+tar -xzf sweep_v0.1.0_darwin_arm64.tar.gz
+./sweep --version
+```
+
+### Version
+
+`sweep --version` and `sweep version` print identical build information
+(see [internal/version](internal/version/version.go)):
+
+```bash
+$ sweep --version
+sweep version dev (commit unknown, built unknown)
+
+$ sweep version
+sweep version dev (commit unknown, built unknown)
+```
+
+A plain `go build`, `go run`, or `go install` always shows the
+`dev`/`unknown` defaults above, since none of them pass linker flags.
+Release binaries built by GoReleaser (see
+[Releasing](#releasing-maintainers) below) have the real version, commit
+SHA, and build date injected instead, for example:
+`sweep version v0.1.0 (commit 4d1767f, built 2026-09-05T12:00:00Z)`.
 
 ## Provider setup
 
@@ -294,6 +338,10 @@ there with the reasoning behind each one.
   very large project may need multiple runs if a provider throttles it.
 - There is no persistent state. Every `scan` re-discovers and
   re-correlates from scratch; nothing is cached between runs.
+- Vercel's provider code is covered by unit tests against a fake HTTP
+  server, but has not yet been exercised against the real Vercel API. The
+  only live, manual smoke test performed against a real project so far
+  covered the Neon path end to end.
 
 ## Development and test commands
 
@@ -321,4 +369,34 @@ credentials.
 
 There is no delete command, no destructive provider call, and no code
 path in this repository that removes a Neon branch, a Vercel deployment,
-or anything on GitHub. Sweep only ever reads.
+or anything on GitHub. Sweep only ever reads. The current release only
+discovers and explains cleanup candidates — it never deletes anything,
+and that will not change without a deliberate, separately-reviewed
+decision.
+
+## Releasing (maintainers)
+
+Sweep publishes prebuilt binaries via [GoReleaser](https://goreleaser.com/)
+(config: [`.goreleaser.yaml`](.goreleaser.yaml)), run by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) whenever a
+tag matching `v*` is pushed. The workflow runs the test suite, then
+GoReleaser builds `./cmd/sweep` for macOS, Linux, and Windows (amd64 and
+arm64) with `CGO_ENABLED=0`, injects the version, commit, and build date
+into [internal/version](internal/version/version.go) via linker flags,
+archives the binaries (`.tar.gz` for macOS/Linux, `.zip` for Windows),
+generates a `checksums.txt`, and publishes everything to a GitHub Release
+using the workflow's own `GITHUB_TOKEN` — no personal access token or
+repository secret is required.
+
+To cut a release:
+
+1. Merge the approved changes into `main`.
+2. Create an annotated, semantic-version tag, for example:
+   `git tag -a v0.1.0 -m "v0.1.0"`.
+3. Push the tag: `git push origin v0.1.0`.
+4. GitHub Actions builds and publishes the release automatically — there
+   is no manual upload step.
+
+## License
+
+Sweep is licensed under the [MIT License](LICENSE).
