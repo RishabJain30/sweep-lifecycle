@@ -118,6 +118,31 @@ Set `VERCEL_TOKEN` to a Vercel access token to enable Vercel discovery. If
 A token with read-only access to Deployments is sufficient. Sweep never
 calls any Vercel write or delete endpoint.
 
+## Neon preview branch naming convention
+
+Sweep correlates a Neon branch with a pull request only when its name
+follows one of these forms
+([`internal/correlation/pr_number.go`](internal/correlation/pr_number.go)):
+
+```
+preview-pr-<number>
+preview-pr-<number>-<suffix>
+preview/pr-<number>
+preview/pr-<number>-<suffix>
+```
+
+`<number>` must be a positive integer with no leading zero (`preview-pr-0`
+and `preview-pr-01` are both rejected). `<suffix>` is optional and, if
+present, must be one or more `-`-separated lowercase alphanumeric segments
+— for example `preview-pr-42-checkout` or `preview/pr-7-hotfix-retry`.
+This is intentionally conservative: the match is anchored to the entire
+branch name, so nothing extra before `preview` (`old-preview-pr-1`) or
+after the suffix is allowed, the separator between `preview` and `pr-` is
+only `-` or `/`, and the suffix can never contain uppercase letters, a
+`/`, or the `preview`/`pr-` shape itself. A branch named `production`,
+`staging`, or anything else that doesn't match one of the four forms above
+is never correlated with a pull request by name.
+
 ## Environment variables and flags
 
 | Name | Kind | Required | Description |
