@@ -1,6 +1,9 @@
 # Compiled binaries
 /bin/
 
+# GoReleaser build output
+/dist/
+
 # Go test output
 *.test
 coverage.out
